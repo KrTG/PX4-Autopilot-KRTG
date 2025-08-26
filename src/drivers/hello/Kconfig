@@ -1,0 +1,5 @@
+menuconfig DRIVERS_HELLO
+	bool "hello"
+	default n
+	---help---
+		Enable support for hello
