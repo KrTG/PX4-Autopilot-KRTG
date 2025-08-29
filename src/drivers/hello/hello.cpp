@@ -1,7 +1,12 @@
 #include <px4_platform_common/getopt.h>
+#include <px4_platform_common/module.h>
 #include <px4_platform_common/log.h>
+#include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+#include <uORB/Publication.hpp>
+#include <uORB/topics/hello.h>
 #include <drivers/drv_hrt.h>
-#include <drivers/drv_io_heater.h>
+
+using namespace time_literals;
 
 class HelloWorld: public ModuleBase<HelloWorld>, public px4::ScheduledWorkItem
 {
@@ -16,14 +21,14 @@ public:
 
 private:
     void Run() override;
-	uORB::Publication<helloworld_status_s> _helloworld_status_pub{ORB_ID(helloworld_status)};
+	uORB::Publication<hello_s> _hello_pub{ORB_ID(hello)};
 };
 
 
-HelloWorld:HelloWorld() :
+HelloWorld::HelloWorld() :
     ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default)
 {
-    _helloworld_status_pub.advertise();
+    _hello_pub.advertise();
 }
 
 int HelloWorld::custom_command(int argc, char *argv[])
@@ -73,10 +78,10 @@ int HelloWorld::task_spawn(int argc, char *argv[])
 
 void HelloWorld::Run()
 {
-    helloworld_status_s status{};
+    hello_s status{};
     status.timestamp = hrt_absolute_time();
     status.hello = 12.75;
-    _helloworld_status_pub.publish(status);
+    _hello_pub.publish(status);
 }
 
 extern "C" __EXPORT int hello_main(int argc, char *argv[])
