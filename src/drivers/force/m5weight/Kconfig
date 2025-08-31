@@ -1,0 +1,5 @@
+menuconfig DRIVERS_FORCE_M5WEIGHT
+	bool "m5weight"
+	default n
+	---help---
+		Enable support for m5weight

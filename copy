@@ -1,0 +1,4 @@
+#!/bin/bash
+stat build/*/*.px4
+cp build/*/*.px4 /mnt/c/Users/Kristoph/Desktop
+stat /mnt/c/Users/Kristoph/Desktop/*.px4

@@ -1,0 +1,12 @@
+Files to change for a driver:
+
+boards/px4/fmu-v6c/default.px4board
+msg/CMakeLists.txt
+msg/Hello.msg
+src/drivers/hello/CMakeLists.txt
+src/drivers/hello/Kconfig
+src/drivers/hello/hello.cpp
+
+TODO:
+- Read configuration values after plugging in
+- Configure the M5weight

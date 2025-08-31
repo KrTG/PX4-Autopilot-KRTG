@@ -1,0 +1,9 @@
+menu "force"
+    menuconfig DRIVERS_FORCE
+        bool "Common force"
+        default n
+        select DRIVERS_M5WEIGHT
+        ---help---
+            Enable default set of force sensors
+    rsource "*/Kconfig"
+endmenu #force
