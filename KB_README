@@ -8,5 +8,4 @@ src/drivers/hello/Kconfig
 src/drivers/hello/hello.cpp
 
 TODO:
-- Read configuration values after plugging in
-- Configure the M5weight
+- Configure offset
