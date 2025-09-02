@@ -8,4 +8,5 @@ src/drivers/hello/Kconfig
 src/drivers/hello/hello.cpp
 
 TODO:
-- Configure offset
+- Offset reset at the start of sensor driver
+- Start driver by default

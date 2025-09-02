@@ -26,79 +26,170 @@
 
 using namespace time_literals;
 
+void _printArguments(int argc, char *argv[])
+{
+	// A buffer to hold the concatenated arguments.
+	// Ensure this buffer is large enough for your expected arguments.
+	char full_args[256] = {0};
+
+	// Start from the second argument (index 1), as the first is the task name.
+	for (int i = 1; i < argc; ++i) {
+		// Concatenate the current argument to the buffer.
+		strncat(full_args, argv[i], sizeof(full_args) - strlen(full_args) - 1);
+
+		// Add a space after each argument, if it's not the last one.
+		if (i < argc - 1) {
+			strncat(full_args, " ", sizeof(full_args) - strlen(full_args) - 1);
+		}
+	}
+
+	PX4_INFO("Arguments given: %s", full_args);
+}
+
 class M5Weight: public ModuleBase<M5Weight>, public px4::ScheduledWorkItem, public device::I2C
 {
 
 public:
-    M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency);
-    M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency, float gap_value);
-    ~M5Weight() override;
+	M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency);
+	M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency, float gap_value);
+	~M5Weight() override;
 
-    static int custom_command(int argc, char *argv[]);
-    static int print_usage(const char *reason = nullptr);
-    static int task_spawn(int argc, char *argv[]);
+	static int custom_command(int argc, char *argv[]);
+	static int print_usage(const char *reason = nullptr);
+	static int task_spawn(int argc, char *argv[]);
 
 private:
-    void Run() override;
+	void Run() override;
 	uORB::Publication<force_sensor_s> _force_sensor_pub{ORB_ID(force_sensor)};
 
-    bool readBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
-    bool writeBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
+	bool readBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
+	bool writeBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
 
-    float getWeight();
-    int32_t getWeightInt();
-    bool getWeightString(char* data);
-    int32_t getRawADC();
+	float getWeight();
+	int32_t getWeightInt();
+	bool getWeightString(char *data);
+	int32_t getRawADC();
 
-    void queryConfig();
-    uint8_t getLPFilter();
-    uint8_t getAvgFilter();
-    uint8_t getEmaFilter();
-    float_t getGapValue();
-    uint8_t getI2CAddress();
-    uint8_t getFirmwareVersion();
+	void queryConfig();
+	uint8_t getLPFilter();
+	uint8_t getAvgFilter();
+	uint8_t getEmaFilter();
+	float_t getGapValue();
+	uint8_t getI2CAddress();
+	uint8_t getFirmwareVersion();
 
-    bool setGapValue(float value);
+	bool setGapValue(float value);
+	bool setOffset();
+	bool setI2CAddress(uint8_t address);
 
-    bool disconnected = true;
-    uint8_t lp_filter;
-    uint8_t avg_filter;
-    uint8_t ema_filter;
-    float_t gap_value;
-    uint8_t i2c_address;
-    uint8_t firmware_version;
+	bool disconnected = true;
+	uint8_t lp_filter;
+	uint8_t avg_filter;
+	uint8_t ema_filter;
+	float_t gap_value;
+	uint8_t i2c_address;
+	uint8_t firmware_version;
 };
 
 
 M5Weight::M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency) :
-    ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default),
-    I2C(DRV_FORCE_M5WEIGHT, MODULE_NAME, bus, address, bus_frequency)
+	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default),
+	I2C(DRV_FORCE_M5WEIGHT, MODULE_NAME, bus, address, bus_frequency)
 {
-    _force_sensor_pub.advertise();
-    init();
+	_force_sensor_pub.advertise();
+	init();
 }
 
 M5Weight::M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency, float_t gap) :
-    ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default),
-    I2C(DRV_FORCE_M5WEIGHT, MODULE_NAME, bus, address, bus_frequency)
+	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default),
+	I2C(DRV_FORCE_M5WEIGHT, MODULE_NAME, bus, address, bus_frequency)
 {
-    _force_sensor_pub.advertise();
-    init();
-    setGapValue(gap);
+	_force_sensor_pub.advertise();
+	init();
+	setGapValue(gap);
 }
 
-M5Weight::~M5Weight() {
-    ScheduleClear();
+M5Weight::~M5Weight()
+{
+	ScheduleClear();
 }
 
 int M5Weight::custom_command(int argc, char *argv[])
 {
-    if (!is_running()) {
-        PX4_INFO("not running");
-        return PX4_ERROR;
-    }
+	_printArguments(argc, argv);
 
-    return print_usage("Unrecognized command.");
+	M5Weight *instance = get_instance();
+
+	if (!instance) {
+		PX4_INFO("The M5 weight I2C driver is not running");
+		return PX4_ERROR;
+	}
+
+	if (argc > 0) {
+		if (strcmp(argv[0], "set") == 0) {
+			if (argc == 2) {
+				if (strcmp(argv[1], "-o") == 0) {
+					if (instance->setOffset()) {
+						return PX4_OK;
+					}
+				}
+
+			} else if (argc == 3) {
+				if (strcmp(argv[1], "-g") == 0) {
+					float_t gap = atof(argv[2]);
+
+					if (instance->setGapValue(gap)) {
+						return PX4_OK;
+					}
+
+				} else if (strcmp(argv[1], "-a") == 0) {
+					uint8_t address = atoi(argv[2]);
+
+					if (instance->setI2CAddress(address)) {
+						return PX4_OK;
+					}
+				}
+
+			} else {
+				return print_usage("Invalid number of arguments to 'set'.");
+			}
+
+		} else if (strcmp(argv[0], "get") == 0) {
+			PX4_INFO(
+				"\n"
+                "Weight            : %.4f\n"
+				"Weight (int)      : %d\n"
+				"Raw ADC           : %d\n",
+				(double)instance->getWeight(),
+				(int)instance->getWeightInt(),
+				(int)instance->getRawADC()
+			);
+			PX4_INFO(
+                "\n"
+                "LP Filter         : %u\n"
+				"Avg Filter        : %u\n"
+				"EMA Filter        : %u\n",
+                (unsigned)instance->getLPFilter(),
+				(unsigned)instance->getAvgFilter(),
+				(unsigned)instance->getEmaFilter()
+			);
+			PX4_INFO(
+                "\n"
+                "Gap Value         : %.4f\n"
+				"I2C Address       : 0x%02X\n"
+				"Firmware Version  : %u",
+                (double)instance->getGapValue(),
+				(unsigned)instance->getI2CAddress(),
+				(unsigned)instance->getFirmwareVersion()
+			);
+			return PX4_OK;
+
+		} else {
+			return print_usage("Invalid number of arguments to 'get'.");
+		}
+	}
+
+	return print_usage("Unrecognized command.");
 }
 
 int M5Weight::print_usage(const char *reason)
@@ -107,15 +198,21 @@ int M5Weight::print_usage(const char *reason)
 		PX4_INFO("%s\n\n", reason);
 	}
 
-    PRINT_MODULE_DESCRIPTION(
-    R"DESCR_STR(
+	PRINT_MODULE_DESCRIPTION(
+		R"DESCR_STR(
 ### Description
 Background process running periodically on the LP work queue to query the M5 weight sensor.
 )DESCR_STR");
 
     PRINT_MODULE_USAGE_NAME("force", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
-    PRINT_MODULE_USAGE_PARAM_FLOAT('g', 100.0f, 0.0f, 1000.0f, "Gap value", true);
+    PRINT_MODULE_USAGE_PARAMS_I2C_ADDRESS(DEVICE_DEFAULT_ADDR);
+    PRINT_MODULE_USAGE_PARAM_INT('g', 2, 1, 255, "Bus", true);
+    PRINT_MODULE_USAGE_PARAM_INT('f', 100000, 100000, 5000000, "Bus frequency", true);
+    PRINT_MODULE_USAGE_COMMAND("set");
+    PRINT_MODULE_USAGE_PARAM_FLOAT('g', 100.0f, 1.0f, 10000.0f, "Gap value", true);
+    PRINT_MODULE_USAGE_PARAM_FLAG('o', "Reset offset. (Taring the weight.)", true);
+    PRINT_MODULE_USAGE_PARAMS_I2C_ADDRESS(DEVICE_DEFAULT_ADDR);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 
 	return 0;
@@ -123,40 +220,46 @@ Background process running periodically on the LP work queue to query the M5 wei
 
 int M5Weight::task_spawn(int argc, char *argv[])
 {
-    M5Weight *instance;
+    _printArguments(argc, argv);
 
-    // A buffer to hold the concatenated arguments.
-    // Ensure this buffer is large enough for your expected arguments.
-    char full_args[256] = {0};
+    uint8_t bus = 2;
+    uint16_t address = DEVICE_DEFAULT_ADDR;
+    uint32_t bus_frequency = 100000;
 
-    // Start from the second argument (index 1), as the first is the task name.
-    for (int i = 1; i < argc; ++i) {
-        // Concatenate the current argument to the buffer.
-        strncat(full_args, argv[i], sizeof(full_args) - strlen(full_args) - 1);
-
-        // Add a space after each argument, if it's not the last one.
-        if (i < argc - 1) {
-            strncat(full_args, " ", sizeof(full_args) - strlen(full_args) - 1);
+    int opt;
+    while ((opt = getopt(argc, argv, "b:a:f:")) != -1) {
+        switch (opt) {
+            case 'b':
+                bus = atoi(optarg);
+                break;
+            case 'a':
+                address = atoi(optarg);
+                break;
+            case 'f':
+                bus_frequency = atoi(optarg);
+                break;
+            case '?':
+                if (optopt == 'b' || optopt == 'a' || optopt == 'f') {
+                    fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+                } else {
+                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+                }
+                return 1;
+            default:
+                abort();
         }
     }
 
-    PX4_INFO("Arguments given: %s", full_args);
-    if (argc > 2 && strcmp(argv[1], "-g") == 0) {
-        float_t gap = atof(argv[2]);
-        instance = new M5Weight(2, DEVICE_DEFAULT_ADDR, 100000, gap);
-
-    }
-    else {
-        instance = new M5Weight(2, DEVICE_DEFAULT_ADDR, 100000);
-    }
+    M5Weight *instance;
+    instance = new M5Weight(bus, address, bus_frequency);
 
     if (!instance) {
-        PX4_ERR("Failed to create hello instance.");
+        PX4_ERR("Failed to create instance.");
 		return PX4_ERROR;
     }
 
     _object.store(instance);
-    instance->ScheduleOnInterval(1_s, 1_s);
+    instance->ScheduleOnInterval(1_s);
     _task_id = task_id_is_work_queue;
 
     return 0;
@@ -283,6 +386,20 @@ bool M5Weight::setGapValue(float offset) {
     }
 }
 
+bool M5Weight::setOffset() {
+    uint8_t datatmp[4];
+    datatmp[0] = 1;
+
+    if(writeBytes(WEIGHT_I2C_SET_OFFESET_REG, datatmp, 1)) {
+        PX4_INFO("Offset reset. (Taring complete.)");
+        return true;
+    }
+    else {
+        PX4_INFO("Failed to reset the offset.");
+        return false;
+    }
+}
+
 int32_t M5Weight::getRawADC()
 {
     uint8_t data[4];
@@ -301,6 +418,17 @@ uint8_t M5Weight::getI2CAddress()
     return 69; // Return error code on failure
 }
 
+bool M5Weight::setI2CAddress(uint8_t address) {
+    if(writeBytes(WEIGHT_I2C_SET_GAP_REG, &address, 1)) {
+        PX4_INFO("Set I2C address : %d", address);
+        return true;
+    }
+    else {
+        PX4_INFO("Failed to set I2C address.");
+        return false;
+    }
+}
+
 uint8_t M5Weight::getFirmwareVersion()
 {
     uint8_t data;
@@ -309,6 +437,7 @@ uint8_t M5Weight::getFirmwareVersion()
     }
     return 69; // Return error code on failure
 }
+
 
 void M5Weight::Run()
 {
