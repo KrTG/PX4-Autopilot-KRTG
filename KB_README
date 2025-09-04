@@ -6,7 +6,3 @@ msg/Hello.msg
 src/drivers/hello/CMakeLists.txt
 src/drivers/hello/Kconfig
 src/drivers/hello/hello.cpp
-
-TODO:
-- Offset reset at the start of sensor driver
-- Start driver by default

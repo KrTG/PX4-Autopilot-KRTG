@@ -60,6 +60,10 @@ public:
 
 private:
 	void Run() override;
+
+    int init() override;
+    int probe() override;
+
 	uORB::Publication<force_sensor_s> _force_sensor_pub{ORB_ID(force_sensor)};
 
 	bool readBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
@@ -81,6 +85,9 @@ private:
 	bool setGapValue(float value);
 	bool setOffset();
 	bool setI2CAddress(uint8_t address);
+	bool setLPFilter(uint8_t value);
+	bool setAvgFilter(uint8_t value);
+	bool setEmaFilter(uint8_t value);
 
 	bool disconnected = true;
 	uint8_t lp_filter;
@@ -96,22 +103,47 @@ M5Weight::M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency) :
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default),
 	I2C(DRV_FORCE_M5WEIGHT, MODULE_NAME, bus, address, bus_frequency)
 {
-	_force_sensor_pub.advertise();
-	init();
-}
-
-M5Weight::M5Weight(uint8_t bus, uint16_t address, uint32_t bus_frequency, float_t gap) :
-	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default),
-	I2C(DRV_FORCE_M5WEIGHT, MODULE_NAME, bus, address, bus_frequency)
-{
-	_force_sensor_pub.advertise();
-	init();
-	setGapValue(gap);
+    if (init() == OK) {
+        _force_sensor_pub.advertise();
+    }
 }
 
 M5Weight::~M5Weight()
 {
 	ScheduleClear();
+}
+
+int M5Weight::init()
+{
+    int init = I2C::init();
+    if(init != OK) {
+        return init;
+    }
+
+    if (!(setOffset())) {
+        return PX4_ERROR;
+    }
+
+    return PX4_OK;
+}
+
+int M5Weight::probe()
+{
+	// For the M5Weight, a reliable check is to read the I2C address register (0xFF)
+	// and see if it returns the same address we are configured to use.
+
+	uint8_t reg = I2C_ADDRESS_REG;
+	uint8_t returned_address = 0;
+
+	if (transfer(&reg, 1, &returned_address, 1) != PX4_OK) {
+		return -EIO;
+	}
+
+	if (returned_address != get_device_address()) {
+		return -ENODEV;
+	}
+
+	return PX4_OK;
 }
 
 int M5Weight::custom_command(int argc, char *argv[])
@@ -148,7 +180,28 @@ int M5Weight::custom_command(int argc, char *argv[])
 					if (instance->setI2CAddress(address)) {
 						return PX4_OK;
 					}
+				} else if (strcmp(argv[1], "-l") == 0) {
+					uint8_t value = atoi(argv[2]);
+
+					if (instance->setLPFilter(value)) {
+						return PX4_OK;
+					}
+
+				} else if (strcmp(argv[1], "-v") == 0) {
+					uint8_t value = atoi(argv[2]);
+
+					if (instance->setAvgFilter(value)) {
+						return PX4_OK;
+					}
+
+				} else if (strcmp(argv[1], "-e") == 0) {
+					uint8_t value = atoi(argv[2]);
+
+					if (instance->setEmaFilter(value)) {
+						return PX4_OK;
+					}
 				}
+
 
 			} else {
 				return print_usage("Invalid number of arguments to 'set'.");
@@ -157,7 +210,7 @@ int M5Weight::custom_command(int argc, char *argv[])
 		} else if (strcmp(argv[0], "get") == 0) {
 			PX4_INFO(
 				"\n"
-                "Weight            : %.4f\n"
+				"Weight            : %.4f\n"
 				"Weight (int)      : %d\n"
 				"Raw ADC           : %d\n",
 				(double)instance->getWeight(),
@@ -165,20 +218,20 @@ int M5Weight::custom_command(int argc, char *argv[])
 				(int)instance->getRawADC()
 			);
 			PX4_INFO(
-                "\n"
-                "LP Filter         : %u\n"
+				"\n"
+				"LP Filter         : %u\n"
 				"Avg Filter        : %u\n"
 				"EMA Filter        : %u\n",
-                (unsigned)instance->getLPFilter(),
+				(unsigned)instance->getLPFilter(),
 				(unsigned)instance->getAvgFilter(),
 				(unsigned)instance->getEmaFilter()
 			);
 			PX4_INFO(
-                "\n"
-                "Gap Value         : %.4f\n"
+				"\n"
+				"Gap Value         : %.4f\n"
 				"I2C Address       : 0x%02X\n"
 				"Firmware Version  : %u",
-                (double)instance->getGapValue(),
+				(double)instance->getGapValue(),
 				(unsigned)instance->getI2CAddress(),
 				(unsigned)instance->getFirmwareVersion()
 			);
@@ -211,7 +264,10 @@ Background process running periodically on the LP work queue to query the M5 wei
     PRINT_MODULE_USAGE_PARAM_INT('f', 100000, 100000, 5000000, "Bus frequency", true);
     PRINT_MODULE_USAGE_COMMAND("set");
     PRINT_MODULE_USAGE_PARAM_FLOAT('g', 100.0f, 1.0f, 10000.0f, "Gap value", true);
-    PRINT_MODULE_USAGE_PARAM_FLAG('o', "Reset offset. (Taring the weight.)", true);
+    PRINT_MODULE_USAGE_PARAM_FLAG('o', "Reset the offset. (Taring the weight.)", true);
+    PRINT_MODULE_USAGE_PARAM_INT('l', 1, 0, 255, "Low-Pass Filter value.", true);
+	PRINT_MODULE_USAGE_PARAM_INT('v', 10, 0, 255, "Average Filter value.", true);
+	PRINT_MODULE_USAGE_PARAM_INT('e', 10, 0, 255, "EMA Filter value.", true);
     PRINT_MODULE_USAGE_PARAMS_I2C_ADDRESS(DEVICE_DEFAULT_ADDR);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 
@@ -305,7 +361,19 @@ uint8_t M5Weight::getLPFilter()
     if (readBytes(WEIGHT_I2C_FILTER_REG, &data, 1)) {
         return data;
     }
-    return 69; // Return error code on failure
+    return PX4_ERROR;
+}
+
+bool M5Weight::setLPFilter(uint8_t value)
+{
+	if (writeBytes(WEIGHT_I2C_FILTER_REG, &value, 1)) {
+		PX4_INFO("Set LP Filter to: %u", value);
+		return true;
+
+	} else {
+		PX4_ERR("Failed to set LP Filter.");
+		return false;
+	}
 }
 
 uint8_t M5Weight::getAvgFilter()
@@ -315,7 +383,19 @@ uint8_t M5Weight::getAvgFilter()
     if (readBytes(WEIGHT_I2C_FILTER_REG + 1, &data, 1)) {
         return data;
     }
-    return 69; // Return error code on failure
+    return PX4_ERROR;
+}
+
+bool M5Weight::setAvgFilter(uint8_t value)
+{
+	if (writeBytes(WEIGHT_I2C_FILTER_REG + 1, &value, 1)) {
+		PX4_INFO("Set Avg Filter to: %u", value);
+		return true;
+
+	} else {
+		PX4_ERR("Failed to set Avg Filter.");
+		return false;
+	}
 }
 
 uint8_t M5Weight::getEmaFilter()
@@ -325,7 +405,19 @@ uint8_t M5Weight::getEmaFilter()
     if (readBytes(WEIGHT_I2C_FILTER_REG + 2, &data, 1)) {
         return data;
     }
-    return 69; // Return error code on failure
+    return PX4_ERROR;
+}
+
+bool M5Weight::setEmaFilter(uint8_t value)
+{
+	if (writeBytes(WEIGHT_I2C_FILTER_REG + 2, &value, 1)) {
+		PX4_INFO("Set Ema Filter to: %u", value);
+		return true;
+
+	} else {
+		PX4_ERR("Failed to set Ema Filter.");
+		return false;
+	}
 }
 
 float_t M5Weight::getWeight() {
@@ -336,7 +428,7 @@ float_t M5Weight::getWeight() {
         memcpy(&c, data, 4);
         return c;
     };
-    return 69.0f; // Return error code on failure
+    return PX4_ERROR;
 }
 
 int32_t M5Weight::getWeightInt()
@@ -345,7 +437,7 @@ int32_t M5Weight::getWeightInt()
     if (readBytes(WEIGHT_I2C_CAL_DATA_INT_REG, data, 4)) {
         return (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
     }
-    return 69; // Return error code on failure
+    return PX4_ERROR;
 }
 
 bool M5Weight::getWeightString(char* data)
@@ -354,7 +446,7 @@ bool M5Weight::getWeightString(char* data)
         data[16] = '\0';
         return true;
     }
-    // Return the string "69" as the error code
+    // Return the string "PX4_ERROR" as the error code
     return false;
 }
 
@@ -366,7 +458,7 @@ float_t M5Weight::getGapValue()
         memcpy(&c, data, 4);
         return c;
     }
-    return 69.0f; // Return error code on failure
+    return PX4_ERROR;
 }
 
 bool M5Weight::setGapValue(float offset) {
@@ -406,7 +498,7 @@ int32_t M5Weight::getRawADC()
     if (readBytes(WEIGHT_I2C_RAW_ADC_REG, data, 4)) {
         return (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
     }
-    return 69; // Return error code on failure
+    return PX4_ERROR;
 }
 
 uint8_t M5Weight::getI2CAddress()
@@ -415,11 +507,11 @@ uint8_t M5Weight::getI2CAddress()
     if (readBytes(I2C_ADDRESS_REG, &data, 1)) {
         return data;
     }
-    return 69; // Return error code on failure
+    return PX4_ERROR;
 }
 
 bool M5Weight::setI2CAddress(uint8_t address) {
-    if(writeBytes(WEIGHT_I2C_SET_GAP_REG, &address, 1)) {
+    if(writeBytes(I2C_ADDRESS_REG, &address, 1)) {
         PX4_INFO("Set I2C address : %d", address);
         return true;
     }
@@ -435,7 +527,7 @@ uint8_t M5Weight::getFirmwareVersion()
     if (readBytes(FIRMWARE_VERSION_REG, &data, 1)) {
         return data;
     }
-    return 69; // Return error code on failure
+    return PX4_ERROR;
 }
 
 
@@ -466,6 +558,8 @@ void M5Weight::Run()
 
     _force_sensor_pub.publish(status);
 }
+
+
 
 extern "C" __EXPORT int m5weight_main(int argc, char *argv[])
 {
