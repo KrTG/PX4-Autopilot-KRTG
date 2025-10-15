@@ -1,5 +1,7 @@
 # FORCE_SENSOR message data
 
+uint8 MAX_INSTANCES = 4
+
 uint64 timestamp		# time since system start (microseconds)
 uint32 device_id
 

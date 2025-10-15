@@ -75,6 +75,7 @@
 #include "streams/ESTIMATOR_STATUS.hpp"
 #include "streams/EXTENDED_SYS_STATE.hpp"
 #include "streams/FLIGHT_INFORMATION.hpp"
+#include "streams/FORCE_SENSOR.hpp"
 #if defined(MAVLINK_MSG_ID_GLOBAL_POSITION)
 #include "streams/GLOBAL_POSITION.hpp"
 #endif //MAVLINK_MSG_ID_GLOBAL_POSITION
@@ -516,6 +517,9 @@ static const StreamListItem streams_list[] = {
 #if defined(GLOBAL_POSITION_HPP)
 	create_stream_list_item<MavlinkStreamGLobalPosition>(),
 #endif // GLOBAL_POSITION_HPP
+#if defined(FORCE_SENSOR_HPP)
+	create_stream_list_item<MavlinkStreamForceSensor>(),
+#endif // FORCE_SENSOR_HPP
 };
 
 const char *get_stream_name(const uint16_t msg_id)
