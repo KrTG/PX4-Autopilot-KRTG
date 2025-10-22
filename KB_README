@@ -6,3 +6,6 @@ msg/Hello.msg
 src/drivers/hello/CMakeLists.txt
 src/drivers/hello/Kconfig
 src/drivers/hello/hello.cpp
+
+Building with docker:
+./Tools/docker_run.sh 'make px4_fmu-v6c_default'
