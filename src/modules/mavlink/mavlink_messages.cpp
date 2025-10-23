@@ -75,7 +75,6 @@
 #include "streams/ESTIMATOR_STATUS.hpp"
 #include "streams/EXTENDED_SYS_STATE.hpp"
 #include "streams/FLIGHT_INFORMATION.hpp"
-#include "streams/FORCE_SENSOR.hpp"
 #if defined(MAVLINK_MSG_ID_GLOBAL_POSITION)
 #include "streams/GLOBAL_POSITION.hpp"
 #endif //MAVLINK_MSG_ID_GLOBAL_POSITION
@@ -122,6 +121,7 @@
 #include "streams/TIMESYNC.hpp"
 #include "streams/VFR_HUD.hpp"
 #include "streams/VIBRATION.hpp"
+#include "streams/WEIGHT_SENSOR.hpp"
 #include "streams/WIND_COV.hpp"
 #if defined(MAVLINK_MSG_ID_FIGURE_EIGHT_EXECUTION_STATUS)
 #include "streams/FIGURE_EIGHT_EXECUTION_STATUS.hpp"
@@ -517,9 +517,9 @@ static const StreamListItem streams_list[] = {
 #if defined(GLOBAL_POSITION_HPP)
 	create_stream_list_item<MavlinkStreamGLobalPosition>(),
 #endif // GLOBAL_POSITION_HPP
-#if defined(FORCE_SENSOR_HPP)
-	create_stream_list_item<MavlinkStreamForceSensor>(),
-#endif // FORCE_SENSOR_HPP
+#if defined(WEIGHT_SENSOR_HPP)
+	create_stream_list_item<MavlinkStreamWeightSensor>(),
+#endif // WEIGHT_SENSOR_HPP
 };
 
 const char *get_stream_name(const uint16_t msg_id)
