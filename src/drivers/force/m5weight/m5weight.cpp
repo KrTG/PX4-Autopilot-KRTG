@@ -4,7 +4,7 @@
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/log.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
-#include <uORB/Publication.hpp>
+#include <uORB/PublicationMulti.hpp>
 #include <uORB/topics/force_sensor.h>
 #include <drivers/drv_hrt.h>
 #include <drivers/device/i2c.h>
@@ -64,7 +64,7 @@ private:
     int init() override;
     int probe() override;
 
-	uORB::Publication<force_sensor_s> _force_sensor_pub{ORB_ID(force_sensor)};
+	uORB::PublicationMulti<force_sensor_s> _force_sensor_pub{ORB_ID(force_sensor)};
 
 	bool readBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
 	bool writeBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
@@ -117,6 +117,7 @@ int M5Weight::init()
 {
     int init = I2C::init();
     if(init != OK) {
+        stop_command();
         return init;
     }
 
@@ -533,7 +534,6 @@ uint8_t M5Weight::getFirmwareVersion()
 
 void M5Weight::Run()
 {
-
     queryConfig();
 
     float force = getWeight();

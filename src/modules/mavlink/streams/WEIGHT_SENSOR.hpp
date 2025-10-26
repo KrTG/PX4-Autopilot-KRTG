@@ -37,20 +37,18 @@ private:
     MavlinkStreamWeightSensor& operator = (const MavlinkStreamWeightSensor &);
 
 protected:
-    explicit MavlinkStreamWeightSensor(Mavlink *mavlink) : MavlinkStream(mavlink)
-    {}
+    explicit MavlinkStreamWeightSensor(Mavlink *mavlink) : MavlinkStream(mavlink) {}
 
 	bool send() override
 	{
 		bool updated = false;
-
 		for (auto &force_sub : _force_sensor_subs) {
 			force_sensor_s force_sensor;
 
 			if (force_sub.update(&force_sensor)) {
 				mavlink_weight_sensor_t weight_msg{};
 
-				weight_msg.timestamp = force_sensor.timestamp;
+				weight_msg.timestamp = force_sensor.timestamp / 1000;
 				weight_msg.id = force_sensor.device_id - 1;
 				weight_msg.weight = force_sensor.force;
 
